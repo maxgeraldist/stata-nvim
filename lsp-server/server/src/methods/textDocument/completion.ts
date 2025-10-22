@@ -1,20 +1,42 @@
 import { RequestMessage } from "../../server";
 import { documents, TextDocumentIdentifier } from "../../documents";
 import * as fs from "fs";
-import * as path from 'path';
-import * as os from 'os';
+import * as path from "path";
+import * as os from "os";
 
-// const words = fs.readFileSync("/usr/share/dict/words").toString().split('\n');
-let syntax:any = [];
-const filePath = path.join(os.homedir(), '.local', 'share', 'nvim', 'lazy', 
-													 'stata-nvim', 'lsp-server', 'commands.json')
-try {
-	const jsonStr = fs.readFileSync(filePath, {encoding:'utf8'});
-	const jsonObj = JSON.parse(jsonStr);
-	syntax = jsonObj.syntax;
-} catch (err) {
-	console.error("error parsing JSON",err);
+function getNvimDataDir(): string {
+  // $XDG_DATA_HOME (Linux/macOS)
+  if (process.env.XDG_DATA_HOME) {
+    return path.join(process.env.XDG_DATA_HOME, "nvim");
+  }
+
+  // Windows standard location
+  if (process.platform === "win32" && process.env.LOCALAPPDATA) {
+    return path.join(process.env.LOCALAPPDATA, "nvim-data");
+  }
+
+  // Unix default
+  return path.join(os.homedir(), ".local", "share", "nvim");
 }
+
+const nvimData = getNvimDataDir();
+const filePath = path.join(
+  nvimData,
+  "lazy",
+  "stata-nvim",
+  "lsp-server",
+  "commands.json"
+);
+
+let syntax: string[] = [];
+try {
+  const jsonStr = fs.readFileSync(filePath, { encoding: "utf8" });
+  const jsonObj = JSON.parse(jsonStr);
+  syntax = jsonObj.syntax;
+} catch (err) {
+  console.error("error parsing JSON", err);
+}
+
 
 type CompletionItem = {
 	label: string;
