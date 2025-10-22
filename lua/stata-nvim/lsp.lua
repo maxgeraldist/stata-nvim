@@ -1,85 +1,51 @@
-local M = {}
+local M = {};
 
-local lspconfig = require("lspconfig")
-local configs = require("lspconfig.configs")
+function M.setup1(opts)
+    vim.notify("entered setup1", vim.log.levels.INFO);
+    opts = opts or {};
+    local dev = opts.dev or false;
 
+    local lsp_path = dev
+        and vim.fn.expand("~/Documents/plugins/stata-nvim/lsp-server/server_bin")
+        or vim.fn.expand(vim.fn.stdpath("data") .. "/lazy/stata-nvim/lsp-server/server_bin");
+    vim.notify("used a dummy", vim.log.levels.INFO);
 
-function M.CheckNecessaryPackages()
-	local function check_command (cmd)
-		local success, _ = pcall(function()
-			return vim.fn.system("which " .. cmd)
-		end)
-		return success and vim.v.shell_error == 0
-	end
-	return {
-		npx = check_command("npx"),
-		ts_node = check_command("ts-node")
-	}
-end
+    if vim.bo.filetype == "stata" then
+        vim.notify("filetype already set — starting LSP directly", vim.log.levels.INFO);
+        vim.schedule(function()
+            vim.notify("in autocmd inner (manual trigger)", vim.log.levels.INFO);
+            vim.lsp.start({
+                name = "stata",
+                cmd = { lsp_path },
+                root_dir = vim.fn.getcwd(),
+                filetypes = { "stata" },
+                on_attach = function(client)
+                    print("Stata LSP attached (native)");
+                end,
+                capabilities = vim.lsp.protocol.make_client_capabilities(),
+            });
+        end);
+    else
+        vim.api.nvim_create_autocmd("FileType", {
+            pattern = "stata",
+            callback = function()
+                vim.notify("in autocmd outer", vim.log.levels.INFO);
+                vim.schedule(function()
+                    vim.notify("in autocmd inner", vim.log.levels.INFO);
+                    vim.lsp.start({
+                        name = "stata",
+                        cmd = { lsp_path },
+                        root_dir = vim.fn.getcwd(),
+                        filetypes = { "stata" },
+                        on_attach = function(client)
+                            print("Stata LSP attached (native)");
+                        end,
+                        capabilities = vim.lsp.protocol.make_client_capabilities(),
+                    });
+                end);
+            end,
+        });
+    end;
+end;
 
-function M.CheckNecessaryEnvVars()
-	local path = vim.fn.getenv("PATH")
-	local paths = vim.split(path, ":")
-  
-	local mp = "StataMP.app"
-	local se = "StataSE.app"
-	local stata_version = {mp = false, se = false}
-	for _, p in ipairs(paths) do
-    if p:find(mp) then
-      stata_version.mp = true
-		elseif p:find(se) then
-			stata_version.se = true
-    end
-  end
-  return stata_version
-end
-
-function M.setup(opts)
-	local lsp_path
-	if opts.dev == false then
-		lsp_path = vim.fn.expand(
-			vim.fn.stdpath('data') .. "/lazy/stata-nvim/lsp-server/server_bin"
-		)
-	else
-		lsp_path = vim.fn.expand(
-			"~/Documents/plugins/stata-nvim/lsp-server/server_bin"
-		)
-	end
-
-	vim.cmd [[autocmd BufRead,BufNewFile *.do set filetype=stata]]
-
-	local custom_attach = function (client)
-		print("Stata LSP started");
-	end
-
-	local pkgs = M.CheckNecessaryPackages()
-	local env = M.CheckNecessaryEnvVars()
-
-	if not pkgs.npx or not pkgs.ts_node then
-		vim.notify("stata-nvim: npx and ts-node are required before running this lsp", vim.log.levels.ERROR)
-	end
-
-	if not env.mp and not env.se then
-    vim.notify("stata-nvim: StataMP or StataSE is required in PATH", vim.log.levels.ERROR)
-  end
-
-	if not configs.stata then
-		configs.stata = {
-			default_config = {
-				cmd = {
-					-- "npx", "ts-node",
-					lsp_path
-				},
-				filetypes = {"stata"},
-        root_dir = lspconfig.util.root_pattern('.git','stata'),
-        settings = {}
-			}
-		}
-	end
-	lspconfig.stata.setup {
-		capabilities = vim.lsp.protocol.make_client_capabilities(),
-		on_attach = custom_attach
-	}
-end
-
-return M
+return M;
