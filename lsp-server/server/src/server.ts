@@ -69,7 +69,7 @@ process.stdin.on("data", (chunk: string) => {
 		}
 
 		// Remove the processed message from buffer
-		buf = buf.slice(messageStart, messageStart+contentLength);
+		buf = buf.slice(messageStart+contentLength);
 	}
 });
 
