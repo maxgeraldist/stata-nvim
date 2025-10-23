@@ -48,28 +48,36 @@ let buf = '';
 
 process.stdin.on("data", (chunk: string) => {
 	buf += chunk; 
-	while (true) {
-		// check for content length line
-		const lengthMatch = buf.match(/Content-Length: (\d+)\r\n/);
-		if(!lengthMatch) break;
-		const contentLength = parseInt(lengthMatch[1], 10);
-		const messageStart = buf.indexOf("\r\n\r\n") + 4;
-		// continue unless full msg is in buf
-		if (buf.length < messageStart + contentLength) break;
-		const rawMsg = buf.slice(messageStart, messageStart+contentLength);
-		const message = JSON.parse(rawMsg);
-		log.write({id: message.id, method: message.method});
-		// call method and respond
-		const method = methodLookup[message.method];
-		if (method) {
-			const result = method(message);
-			if(result!== undefined){
-				respond(message.id, result);
-			}
-		}
+    while (true) {
+        const lengthMatch = buf.match(/Content-Length: (\d+)\r\n/);
+        if(!lengthMatch) break;
+        const contentLength = parseInt(lengthMatch[1], 10);
+        const messageStart = buf.indexOf("\r\n\r\n") + 4;
+        if (buf.length < messageStart + contentLength) break;
+        const rawMsg = buf.slice(messageStart, messageStart + contentLength);
+        if (contentLength > 0) {
+            try {
+                const message = JSON.parse(rawMsg);
+                log.write({ id: message.id, method: message.method });
 
-		// Remove the processed message from buffer
-		buf = buf.slice(messageStart+contentLength);
-	}
+                const method = methodLookup[message.method];
+                if (method) {
+                    const result = method(message);
+                    if (result !== undefined) {
+                        respond(message.id, result);
+                    }
+                }
+            } catch (err) {
+                log.write({ 
+                    error: "JSON parse failed", 
+                    raw: rawMsg.slice(0, 200),
+                    err: err.message 
+                });
+            }
+        } else {
+            log.write({ info: "Received and skipped empty message." });
+        }
+        buf = buf.slice(messageStart + contentLength);
+    }
 });
 
