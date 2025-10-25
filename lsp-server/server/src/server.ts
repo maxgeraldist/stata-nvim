@@ -34,7 +34,7 @@ const respond = (id: RequestMessage['id'], result:object | null) => {
 	const msg = JSON.stringify({id, result});
 	const messageLength = Buffer.byteLength(msg, "utf-8");
 	const header = `Content-Length: ${messageLength}\r\n\r\n`;
-	log.write(header+msg);
+	// log.write(header+msg);
 	process.stdout.write(header+msg);
 };
 
@@ -44,40 +44,47 @@ const respond = (id: RequestMessage['id'], result:object | null) => {
 	outside of the function, the json object can be parsed from the additional
 	characters using a regex 
 */
-let buf = ''; 
+process.stdin.setEncoding("utf8");
 
-process.stdin.on("data", (chunk: string) => {
-	buf += chunk; 
-    while (true) {
-        const lengthMatch = buf.match(/Content-Length: (\d+)\r\n/);
-        if(!lengthMatch) break;
-        const contentLength = parseInt(lengthMatch[1], 10);
-        const messageStart = buf.indexOf("\r\n\r\n") + 4;
-        if (buf.length < messageStart + contentLength) break;
-        const rawMsg = buf.slice(messageStart, messageStart + contentLength);
-        if (contentLength > 0) {
-            try {
-                const message = JSON.parse(rawMsg);
-                log.write({ id: message.id, method: message.method });
+let buf = Buffer.alloc(0);
 
-                const method = methodLookup[message.method];
-                if (method) {
-                    const result = method(message);
-                    if (result !== undefined) {
-                        respond(message.id, result);
-                    }
-                }
-            } catch (err) {
-                log.write({ 
-                    error: "JSON parse failed", 
-                    raw: rawMsg.slice(0, 200),
-                    err: err.message 
-                });
-            }
-        } else {
-            log.write({ info: "Received and skipped empty message." });
-        }
-        buf = buf.slice(messageStart + contentLength);
+process.stdin.on("data", (chunk) => {
+  buf = Buffer.concat([buf, Buffer.from(chunk, "utf8")]);
+
+  while (true) {
+    const str = buf.toString("utf8");
+
+    // find header end (\r\n\r\n or \n\n)
+    const headerMatch = str.match(/Content-Length: (\d+)\s*\r?\n\r?\n/);
+    if (!headerMatch) break;
+
+    const contentLength = parseInt(headerMatch[1], 10);
+    const headerEndIndex = headerMatch.index + headerMatch[0].length;
+    const totalLength = Buffer.byteLength(str.slice(0, headerEndIndex), "utf8");
+
+    if (buf.length < totalLength + contentLength) break; // wait for more data
+
+    const jsonBytes = buf.subarray(totalLength, totalLength + contentLength);
+    const rawMsg = jsonBytes.toString("utf8");
+
+    try {
+      const message = JSON.parse(rawMsg);
+      const method = message.method && methodLookup[message.method];
+      if (method) {
+        const result = method(message);
+        if (result !== undefined) respond(message.id, result);
+      }
+    } catch (err) {
+      log.write({
+        error: "JSON parse failed",
+        rawLength: rawMsg.length,
+        err: err.message,
+        snippetEnd: rawMsg.slice(-20)
+      });
     }
+
+    // remove processed bytes
+    buf = buf.subarray(totalLength + contentLength);
+  }
 });
 
