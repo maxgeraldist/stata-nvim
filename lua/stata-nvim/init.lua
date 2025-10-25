@@ -1,10 +1,8 @@
 local M = {};
 
 local function main(opts)
-    vim.notify("Starting Stata LSP lafufu", vim.log.levels.INFO);
     opts = opts or { dev = false, stata_license_type = "stata-mp" };
-    vim.notify("main() received opts: " .. vim.inspect(opts), vim.log.levels.INFO);
-    require('stata-nvim.lsp').setup1(opts);
+    require('stata-nvim.lsp').setup(opts);
 end;
 
 -- so far, opts has two values:
@@ -14,12 +12,8 @@ end;
 -- e.g. {dev = false, stata_license_type = "stata-mp"}
 
 function M.setup(opts)
-    vim.notify("Starting Stata LSP labubu", vim.log.levels.INFO);
-    print(vim.inspect(package.path));
-
     -- Run immediately if filetype is already set
     if vim.bo.filetype == "stata" then
-        vim.notify("Filetype already set to stata — calling main() directly", vim.log.levels.INFO);
         vim.schedule(function()
             main(opts);
         end);
@@ -29,7 +23,6 @@ function M.setup(opts)
             pattern = { "stata" },
             once = true,
             callback = function()
-                vim.notify("Starting Stata LSP lamumu", vim.log.levels.INFO);
                 vim.schedule(function()
                     main(opts);
                 end);

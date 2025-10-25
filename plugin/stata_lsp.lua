@@ -1,64 +1,51 @@
 local data_path = vim.fn.stdpath("data");
 local stata_lsp_path = vim.fs.joinpath(data_path, "lazy", "stata-nvim", "lsp-server");
-
--- Helper function for running a system command asynchronously
-local function run_async(cmd, args, cwd, callback)
-    vim.system({ cmd, unpack(args or {}) }, { cwd = cwd }, function(obj)
-        if obj.code ~= 0 then
-            vim.schedule(function()
-                vim.notify(("Command failed: %s\n%s"):format(cmd, obj.stderr), vim.log.levels.ERROR);
-            end);
-        else
-            if callback then
-                callback(obj);
-            end;
-        end;
-    end);
-end;
-
-local function compile()
-    run_async("bun", { "build", "./server/src/server.ts", "--compile", "--outfile", "server_bin" },
-        stata_lsp_path);
-    vim.schedule(function()
-        print("Compiled Stata LSP server");
-    end);
-end;
-
-local function install()
-    run_async("npm", { "install" }, stata_lsp_path, compile);
-    vim.schedule(function()
-        print("Installed npm dependencies");
-    end);
-end;
+local binary_path = vim.fs.joinpath(stata_lsp_path,
+    vim.fn.has("win32") == 1 and "server_bin.exe" or "server_bin");
 
 local function file_exists(path)
     local stat = vim.loop.fs_stat(path);
     return stat and stat.type == "file";
 end;
 
+-- Run a command synchronously, blocking until it finishes.
+local function run_sync(cmd, args, cwd)
+    local output = {};
+    local err_output = {};
+    local handle = vim.system({ cmd, unpack(args or {}) }, { cwd = cwd, text = true }, function(obj)
+        err_output = vim.split(obj.stderr or "", "\n");
+        if obj.code ~= 0 then
+            vim.schedule(function()
+                vim.notify(("Command failed: %s\n%s"):format(cmd, table.concat(err_output, "\n")),
+                    vim.log.levels.ERROR);
+            end);
+        end;
+    end);
+    handle:wait();
+end;
+
+local function compile()
+    run_sync("bun", { "build", "./server/src/server.ts", "--compile", "--outfile", "server_bin" },
+        stata_lsp_path);
+end;
+
+local function install()
+    run_sync("npm", { "install" }, stata_lsp_path);
+    compile();
+end;
+
+local function init()
+    run_sync("npm", { "init", "-y" }, stata_lsp_path);
+    install();
+end;
+
 local function build_binary_server()
-    local binary_path;
-    if vim.fn.has("win32") == 1 then
-        binary_path = vim.fs.joinpath(stata_lsp_path, "server_bin.exe");
-    else
-        binary_path = vim.fs.joinpath(stata_lsp_path, "server_bin");
-    end;
     if file_exists(binary_path) then
         return;
     end;
-    run_async("npm", { "init", "-y" }, stata_lsp_path, function(obj)
-        if obj.code == 0 then
-            vim.schedule(function()
-                print("Initialized npm project");
-            end);
-            install();
-        else
-            vim.schedule(function()
-                print("npm project already initialized or init failed");
-            end);
-            install();
-        end;
-    end);
+    vim.notify("stata-nvim: building LSP binary", vim.log.levels.INFO);
+    init();
+    vim.notify("stata-nvim: build complete", vim.log.levels.INFO);
 end;
 
 build_binary_server();
